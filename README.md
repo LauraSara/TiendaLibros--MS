@@ -22,7 +22,7 @@ Actividad sumativa de la **Experiencia 1** (*Programando nuestro BackEnd*): back
 
 - JDK 17+
 - Maven 3.9+
-- Oracle Database (usuario/esquema con permisos DDL según tu entorno). Por defecto se asume **Oracle Database Free** en local (PDB `FREEPDB1`). **Oracle XE** suele usar el PDB `XEPDB1`; en ese caso define `ORACLE_URL` con `/XEPDB1`.
+- Oracle Database (usuario/esquema con permisos DDL según tu entorno).
 
 ## Base de datos
 
