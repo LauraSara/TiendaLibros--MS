@@ -1,8 +1,8 @@
 package com.duoc.tiendalibros.libros.service;
 
 import com.duoc.tiendalibros.libros.dto.DetallePedidoResponse;
-import com.duoc.tiendalibros.libros.dto.LineaPedidoRequest;
 import com.duoc.tiendalibros.libros.dto.PedidoCreateRequest;
+import com.duoc.tiendalibros.libros.dto.PedidoLineRequest;
 import com.duoc.tiendalibros.libros.dto.PedidoResponse;
 import com.duoc.tiendalibros.libros.entity.DetallePedido;
 import com.duoc.tiendalibros.libros.entity.Libro;
@@ -10,10 +10,13 @@ import com.duoc.tiendalibros.libros.entity.Pedido;
 import com.duoc.tiendalibros.libros.repository.LibroRepository;
 import com.duoc.tiendalibros.libros.repository.PedidoRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,126 +36,150 @@ public class PedidoService {
   }
 
   @Transactional(readOnly = true)
-  public List<PedidoResponse> listar(Authentication auth) {
-    Long uid = currentUserId(auth);
-    boolean admin = isAdmin(auth);
-    List<Pedido> lista =
-        admin ? pedidoRepository.findAllConDetalles() : pedidoRepository.findByUsuarioIdConDetalles(uid);
-    return lista.stream().map(this::toResponse).toList();
+  public List<PedidoResponse> list() {
+    if (isAdmin()) {
+      return pedidoRepository.findAllWithDetalles().stream().map(PedidoService::toResponse).toList();
+    }
+    Long uid = currentUserId();
+    return pedidoRepository.findByUsuarioIdWithDetalles(uid).stream()
+        .map(PedidoService::toResponse)
+        .toList();
   }
 
   @Transactional(readOnly = true)
-  public PedidoResponse obtener(Long id, Authentication auth) {
+  public PedidoResponse getById(Long id) {
     Pedido p =
         pedidoRepository
-            .findByIdConDetalles(id)
+            .findByIdWithDetalles(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido no encontrado"));
-    authorizePedido(p, auth);
+    if (!canAccessPedido(p)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+    }
     return toResponse(p);
   }
 
   @Transactional
-  public PedidoResponse crear(PedidoCreateRequest req, Authentication auth) {
-    Long usuarioId = currentUserId(auth);
-    if (req.lineas().isEmpty()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El pedido debe tener lineas");
+  public PedidoResponse create(PedidoCreateRequest req) {
+    Long uid = currentUserId();
+    if (req.lineas() == null || req.lineas().isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe incluir al menos una linea");
     }
     Pedido pedido = new Pedido();
-    pedido.setUsuarioId(usuarioId);
-    pedido.setFechaCreacion(java.time.LocalDateTime.now());
+    pedido.setUsuarioId(uid);
     pedido.setEstadoPago(PAGADO_SIMULADO);
+
     BigDecimal total = BigDecimal.ZERO;
     List<DetallePedido> detalles = new ArrayList<>();
-    for (LineaPedidoRequest linea : req.lineas()) {
+
+    for (PedidoLineRequest linea : req.lineas()) {
       Libro libro =
           libroRepository
               .findById(linea.libroId())
-              .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no encontrado"));
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.BAD_REQUEST, "Libro no encontrado: " + linea.libroId()));
       if (!Boolean.TRUE.equals(libro.getActivo())) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Libro inactivo: " + libro.getId());
       }
       if (libro.getStock() < linea.cantidad()) {
         throw new ResponseStatusException(
-            HttpStatus.CONFLICT, "Stock insuficiente para libro id " + libro.getId());
+            HttpStatus.BAD_REQUEST, "Stock insuficiente para libro id " + libro.getId());
       }
-      BigDecimal subtotal = libro.getPrecio().multiply(BigDecimal.valueOf(linea.cantidad()));
+      BigDecimal subtotal =
+          libro.getPrecio().multiply(BigDecimal.valueOf(linea.cantidad())).setScale(2, RoundingMode.HALF_UP);
       total = total.add(subtotal);
-      DetallePedido dp = new DetallePedido();
-      dp.setPedido(pedido);
-      dp.setLibro(libro);
-      dp.setCantidad(linea.cantidad());
-      dp.setSubtotal(subtotal);
-      detalles.add(dp);
+
+      DetallePedido d = new DetallePedido();
+      d.setPedido(pedido);
+      d.setLibro(libro);
+      d.setCantidad(linea.cantidad());
+      d.setSubtotal(subtotal);
+      detalles.add(d);
+
       libro.setStock(libro.getStock() - linea.cantidad());
+      libroRepository.save(libro);
     }
-    pedido.setTotal(total);
+
+    pedido.setTotal(total.setScale(2, RoundingMode.HALF_UP));
     pedido.getDetalles().addAll(detalles);
     Pedido guardado = pedidoRepository.save(pedido);
-    return toResponse(
-        pedidoRepository
-            .findByIdConDetalles(guardado.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR)));
+    return toResponse(guardado);
   }
 
   @Transactional
-  public PedidoResponse cancelar(Long id, Authentication auth) {
+  public PedidoResponse cancelar(Long id) {
     Pedido p =
         pedidoRepository
-            .findByIdConDetalles(id)
+            .findByIdWithDetalles(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido no encontrado"));
-    authorizePedido(p, auth);
+    if (!canAccessPedido(p)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+    }
+    if (CANCELADO.equals(p.getEstadoPago())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El pedido ya esta cancelado");
+    }
     if (!PAGADO_SIMULADO.equals(p.getEstadoPago())) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "Solo se pueden cancelar pedidos pagados simulados");
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estado no permite cancelacion");
     }
+    restaurarStock(p);
     p.setEstadoPago(CANCELADO);
-    for (DetallePedido d : p.getDetalles()) {
-      Libro libro = d.getLibro();
-      libro.setStock(libro.getStock() + d.getCantidad());
-    }
     return toResponse(pedidoRepository.save(p));
   }
 
   @Transactional
-  public void eliminar(Long id, Authentication auth) {
+  public void delete(Long id) {
     Pedido p =
         pedidoRepository
-            .findByIdConDetalles(id)
+            .findByIdWithDetalles(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido no encontrado"));
-    if (!isAdmin(auth)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo administrador");
-    }
     if (PAGADO_SIMULADO.equals(p.getEstadoPago())) {
-      for (DetallePedido d : p.getDetalles()) {
-        Libro libro = d.getLibro();
-        libro.setStock(libro.getStock() + d.getCantidad());
-      }
+      restaurarStock(p);
     }
     pedidoRepository.delete(p);
   }
 
-  private void authorizePedido(Pedido p, Authentication auth) {
-    if (isAdmin(auth)) {
-      return;
-    }
-    Long uid = currentUserId(auth);
-    if (!p.getUsuarioId().equals(uid)) {
-      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+  private void restaurarStock(Pedido p) {
+    for (DetallePedido d : p.getDetalles()) {
+      Libro libro = d.getLibro();
+      libro.setStock(libro.getStock() + d.getCantidad());
+      libroRepository.save(libro);
     }
   }
 
-  private static Long currentUserId(Authentication auth) {
-    if (auth == null || auth.getName() == null) {
+  private boolean canAccessPedido(Pedido p) {
+    if (isAdmin()) {
+      return true;
+    }
+    return p.getUsuarioId().equals(currentUserId());
+  }
+
+  private static boolean isAdmin() {
+    Authentication a = SecurityContextHolder.getContext().getAuthentication();
+    if (a == null) {
+      return false;
+    }
+    for (GrantedAuthority ga : a.getAuthorities()) {
+      if ("ROLE_ADMIN".equals(ga.getAuthority())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static Long currentUserId() {
+    Authentication a = SecurityContextHolder.getContext().getAuthentication();
+    if (a == null || a.getName() == null) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
     }
-    return Long.parseLong(auth.getName());
+    try {
+      return Long.parseLong(a.getName());
+    } catch (NumberFormatException e) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token invalido");
+    }
   }
 
-  private static boolean isAdmin(Authentication auth) {
-    return auth != null
-        && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-  }
-
-  private PedidoResponse toResponse(Pedido p) {
+  private static PedidoResponse toResponse(Pedido p) {
     List<DetallePedidoResponse> lineas =
         p.getDetalles().stream()
             .map(
@@ -163,19 +190,7 @@ public class PedidoService {
                         d.getCantidad(),
                         d.getSubtotal()))
             .toList();
-    String mensaje =
-        PAGADO_SIMULADO.equals(p.getEstadoPago())
-            ? "Pago simulado exitoso. No se utilizo pasarela real."
-            : CANCELADO.equals(p.getEstadoPago())
-                ? "Pedido cancelado. Stock restaurado."
-                : "";
     return new PedidoResponse(
-        p.getId(),
-        p.getUsuarioId(),
-        p.getFechaCreacion(),
-        p.getTotal(),
-        p.getEstadoPago(),
-        mensaje,
-        lineas);
+        p.getId(), p.getUsuarioId(), p.getFechaCreacion(), p.getTotal(), p.getEstadoPago(), lineas);
   }
 }

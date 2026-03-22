@@ -10,5 +10,4 @@ public record PedidoResponse(
     LocalDateTime fechaCreacion,
     BigDecimal total,
     String estadoPago,
-    String mensaje,
     List<DetallePedidoResponse> lineas) {}

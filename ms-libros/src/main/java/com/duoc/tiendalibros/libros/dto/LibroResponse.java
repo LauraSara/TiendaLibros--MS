@@ -10,5 +10,5 @@ public record LibroResponse(
     String editorial,
     BigDecimal precio,
     Integer stock,
-    boolean activo,
+    Boolean activo,
     String descripcion) {}

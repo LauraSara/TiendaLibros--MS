@@ -5,3 +5,16 @@
 .project
 .settings/
 *.log
+.env
+.env.*
+!.env.example
+**/application-local.yml
+**/application-local.properties
+**/application-secret.yml
+**/application-secret.properties
+*.zip
+.DS_Store
+Thumbs.db
+Desktop.ini
+hs_err_pid*.log
+replay_pid*.log

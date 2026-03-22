@@ -9,7 +9,6 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -24,65 +23,72 @@ public class LibroService {
   }
 
   @Transactional(readOnly = true)
-  public List<LibroResponse> listar(String q) {
-    List<Libro> libros;
-    if (!StringUtils.hasText(q)) {
-      libros = libroRepository.findByActivoTrueOrderByTituloAsc();
+  public List<LibroResponse> listCatalogo(String q) {
+    List<Libro> rows;
+    if (q == null || q.isBlank()) {
+      rows = libroRepository.findByActivoTrueOrderByTituloAsc();
     } else {
-      libros = libroRepository.buscarPorTexto(q.trim());
+      rows = libroRepository.buscarActivos(q.trim());
     }
-    return libros.stream().map(this::toResponse).toList();
+    return rows.stream().map(LibroService::toResponse).toList();
   }
 
   @Transactional(readOnly = true)
-  public LibroResponse obtener(Long id) {
-    return libroRepository
-        .findById(id)
-        .map(this::toResponse)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no encontrado"));
-  }
-
-  @Transactional
-  public LibroResponse crear(LibroRequest req) {
-    Libro l = new Libro();
-    aplicar(l, req);
-    return toResponse(libroRepository.save(l));
-  }
-
-  @Transactional
-  public LibroResponse actualizar(Long id, LibroRequest req) {
-    Libro l =
-        libroRepository
-            .findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no encontrado"));
-    aplicar(l, req);
-    return toResponse(libroRepository.save(l));
-  }
-
-  @Transactional
-  public void eliminar(Long id) {
-    if (!libroRepository.existsById(id)) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no encontrado");
+  public LibroResponse findById(Long id) {
+    Libro l = libroRepository.findById(id).orElseThrow(() -> notFound(id));
+    if (!Boolean.TRUE.equals(l.getActivo())) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no disponible");
     }
+    return toResponse(l);
+  }
+
+  @Transactional
+  public LibroResponse create(LibroRequest req) {
+    Libro l = new Libro();
+    apply(l, req);
+    return toResponse(libroRepository.save(l));
+  }
+
+  @Transactional
+  public LibroResponse update(Long id, LibroRequest req) {
+    Libro l = libroRepository.findById(id).orElseThrow(() -> notFound(id));
+    apply(l, req);
+    return toResponse(libroRepository.save(l));
+  }
+
+  @Transactional
+  public void delete(Long id) {
+    Libro l = libroRepository.findById(id).orElseThrow(() -> notFound(id));
     if (detallePedidoRepository.existsByLibro_Id(id)) {
       throw new ResponseStatusException(
-          HttpStatus.CONFLICT, "No se puede eliminar: el libro tiene pedidos asociados");
+          HttpStatus.BAD_REQUEST, "No se puede eliminar: el libro figura en pedidos");
     }
-    libroRepository.deleteById(id);
+    libroRepository.delete(l);
   }
 
-  private void aplicar(Libro l, LibroRequest req) {
+  private static ResponseStatusException notFound(Long id) {
+    return new ResponseStatusException(HttpStatus.NOT_FOUND, "Libro no encontrado: " + id);
+  }
+
+  private static void apply(Libro l, LibroRequest req) {
     l.setTitulo(req.titulo().trim());
     l.setAutor(req.autor().trim());
-    l.setIsbn(req.isbn() != null ? req.isbn().trim() : null);
-    l.setEditorial(req.editorial() != null ? req.editorial().trim() : null);
+    l.setIsbn(trimToNull(req.isbn()));
+    l.setEditorial(trimToNull(req.editorial()));
     l.setPrecio(req.precio());
     l.setStock(req.stock());
     l.setActivo(req.activo());
-    l.setDescripcion(req.descripcion() != null ? req.descripcion().trim() : null);
+    l.setDescripcion(trimToNull(req.descripcion()));
   }
 
-  private LibroResponse toResponse(Libro l) {
+  private static String trimToNull(String s) {
+    if (s == null || s.isBlank()) {
+      return null;
+    }
+    return s.trim();
+  }
+
+  private static LibroResponse toResponse(Libro l) {
     return new LibroResponse(
         l.getId(),
         l.getTitulo(),
@@ -91,7 +97,7 @@ public class LibroService {
         l.getEditorial(),
         l.getPrecio(),
         l.getStock(),
-        Boolean.TRUE.equals(l.getActivo()),
+        l.getActivo(),
         l.getDescripcion());
   }
 }

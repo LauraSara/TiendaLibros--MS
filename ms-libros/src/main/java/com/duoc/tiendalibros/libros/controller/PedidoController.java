@@ -8,7 +8,6 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,32 +28,33 @@ public class PedidoController {
   }
 
   @GetMapping
-  public List<PedidoResponse> listar(Authentication authentication) {
-    return pedidoService.listar(authentication);
+  @PreAuthorize("hasRole('ADMIN') or hasRole('CLIENTE')")
+  public List<PedidoResponse> list() {
+    return pedidoService.list();
   }
 
   @GetMapping("/{id}")
-  public PedidoResponse obtener(@PathVariable Long id, Authentication authentication) {
-    return pedidoService.obtener(id, authentication);
+  @PreAuthorize("hasRole('ADMIN') or hasRole('CLIENTE')")
+  public PedidoResponse get(@PathVariable Long id) {
+    return pedidoService.getById(id);
   }
 
   @PostMapping
-  @PreAuthorize("hasAnyRole('ADMIN','CLIENTE')")
-  public ResponseEntity<PedidoResponse> crear(
-      @Valid @RequestBody PedidoCreateRequest request, Authentication authentication) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(pedidoService.crear(request, authentication));
+  @PreAuthorize("hasRole('ADMIN') or hasRole('CLIENTE')")
+  public ResponseEntity<PedidoResponse> create(@Valid @RequestBody PedidoCreateRequest request) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(pedidoService.create(request));
   }
 
   @PutMapping("/{id}/cancelar")
-  @PreAuthorize("hasAnyRole('ADMIN','CLIENTE')")
-  public PedidoResponse cancelar(@PathVariable Long id, Authentication authentication) {
-    return pedidoService.cancelar(id, authentication);
+  @PreAuthorize("hasRole('ADMIN') or hasRole('CLIENTE')")
+  public PedidoResponse cancelar(@PathVariable Long id) {
+    return pedidoService.cancelar(id);
   }
 
   @DeleteMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<Void> eliminar(@PathVariable Long id, Authentication authentication) {
-    pedidoService.eliminar(id, authentication);
+  public ResponseEntity<Void> delete(@PathVariable Long id) {
+    pedidoService.delete(id);
     return ResponseEntity.noContent().build();
   }
 }

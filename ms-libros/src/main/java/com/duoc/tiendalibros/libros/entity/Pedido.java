@@ -3,10 +3,12 @@ package com.duoc.tiendalibros.libros.entity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,7 +33,7 @@ public class Pedido {
   private Long usuarioId;
 
   @Column(name = "fecha_creacion", nullable = false)
-  private LocalDateTime fechaCreacion = LocalDateTime.now();
+  private LocalDateTime fechaCreacion;
 
   @Column(nullable = false, precision = 12, scale = 2)
   private BigDecimal total;
@@ -39,6 +41,13 @@ public class Pedido {
   @Column(name = "estado_pago", nullable = false, length = 40)
   private String estadoPago;
 
-  @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
   private List<DetallePedido> detalles = new ArrayList<>();
+
+  @PrePersist
+  void onCreate() {
+    if (fechaCreacion == null) {
+      fechaCreacion = LocalDateTime.now();
+    }
+  }
 }

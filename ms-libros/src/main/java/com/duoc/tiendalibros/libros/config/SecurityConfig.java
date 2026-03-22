@@ -32,10 +32,6 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/libros", "/api/libros/*")
                     .permitAll()
-                    .requestMatchers("/api/pedidos", "/api/pedidos/**")
-                    .authenticated()
-                    .requestMatchers("/api/libros", "/api/libros/**")
-                    .hasRole("ADMIN")
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

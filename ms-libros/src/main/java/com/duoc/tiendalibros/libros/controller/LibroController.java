@@ -29,31 +29,31 @@ public class LibroController {
   }
 
   @GetMapping
-  public List<LibroResponse> listar(@RequestParam(required = false) String q) {
-    return libroService.listar(q);
+  public List<LibroResponse> list(@RequestParam(required = false) String q) {
+    return libroService.listCatalogo(q);
   }
 
   @GetMapping("/{id}")
-  public LibroResponse obtener(@PathVariable Long id) {
-    return libroService.obtener(id);
+  public LibroResponse get(@PathVariable Long id) {
+    return libroService.findById(id);
   }
 
   @PostMapping
   @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<LibroResponse> crear(@Valid @RequestBody LibroRequest request) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(libroService.crear(request));
+  public ResponseEntity<LibroResponse> create(@Valid @RequestBody LibroRequest request) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(libroService.create(request));
   }
 
   @PutMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
-  public LibroResponse actualizar(@PathVariable Long id, @Valid @RequestBody LibroRequest request) {
-    return libroService.actualizar(id, request);
+  public LibroResponse update(@PathVariable Long id, @Valid @RequestBody LibroRequest request) {
+    return libroService.update(id, request);
   }
 
   @DeleteMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<Void> eliminar(@PathVariable Long id) {
-    libroService.eliminar(id);
+  public ResponseEntity<Void> delete(@PathVariable Long id) {
+    libroService.delete(id);
     return ResponseEntity.noContent().build();
   }
 }

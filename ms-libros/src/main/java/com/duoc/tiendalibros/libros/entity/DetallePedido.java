@@ -25,11 +25,11 @@ public class DetallePedido {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY)
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "pedido_id", nullable = false)
   private Pedido pedido;
 
-  @ManyToOne(fetch = FetchType.LAZY)
+  @ManyToOne(fetch = FetchType.EAGER, optional = false)
   @JoinColumn(name = "libro_id", nullable = false)
   private Libro libro;
 

@@ -11,9 +11,7 @@ public interface LibroRepository extends JpaRepository<Libro, Long> {
   List<Libro> findByActivoTrueOrderByTituloAsc();
 
   @Query(
-      "SELECT l FROM Libro l WHERE l.activo = true AND ("
-          + "LOWER(l.titulo) LIKE LOWER(CONCAT('%', :q, '%')) OR "
-          + "LOWER(l.autor) LIKE LOWER(CONCAT('%', :q, '%')) OR "
-          + "LOWER(COALESCE(l.isbn, '')) LIKE LOWER(CONCAT('%', :q, '%')))")
-  List<Libro> buscarPorTexto(@Param("q") String q);
+      "SELECT l FROM Libro l WHERE l.activo = true AND (LOWER(l.titulo) LIKE LOWER(CONCAT('%', :q, '%'))"
+          + " OR LOWER(l.autor) LIKE LOWER(CONCAT('%', :q, '%'))) ORDER BY l.titulo")
+  List<Libro> buscarActivos(@Param("q") String q);
 }
